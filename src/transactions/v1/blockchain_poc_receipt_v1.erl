@@ -133,7 +133,7 @@ frequency(Receipt) ->
 datarate(Receipt) ->
     Receipt#blockchain_poc_receipt_v1_pb.datarate.
 
--spec addr_hash(Receipt :: poc_receipt()) -> binary().
+-spec addr_hash(Receipt :: poc_receipt()) -> 'undefined' | binary().
 addr_hash(Receipt) ->
     Receipt#blockchain_poc_receipt_v1_pb.addr_hash.
 
