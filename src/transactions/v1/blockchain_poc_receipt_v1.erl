@@ -22,6 +22,8 @@
     frequency/1,
     channel/1,
     datarate/1,
+    addr_hash/1,
+    addr_hash/2,
     sign/2,
     is_valid/1,
     print/1,
@@ -130,6 +132,15 @@ frequency(Receipt) ->
 -spec datarate(Receipt :: poc_receipt()) -> list().
 datarate(Receipt) ->
     Receipt#blockchain_poc_receipt_v1_pb.datarate.
+
+-spec addr_hash(Receipt :: poc_receipt()) -> binary().
+addr_hash(Receipt) ->
+    Receipt#blockchain_poc_receipt_v1_pb.addr_hash.
+
+-spec addr_hash(Receipt :: poc_receipt(), Hash :: binary()) -> poc_receipt().
+addr_hash(Receipt, Hash) when is_binary(Hash), byte_size(Hash) =< 32 ->
+    Receipt#blockchain_poc_receipt_v1_pb{addr_hash = Hash}.
+
 
 -spec channel(Receipt :: poc_receipt()) -> non_neg_integer().
 channel(Receipt) ->
