@@ -52,7 +52,7 @@ new(ValidatorAddress, OwnerAddress,
 new(ValidatorAddress, OwnerAddress,
     Stake, Nonce, Fee) ->
     #blockchain_txn_stake_validator_v1_pb{
-       validator = ValidatorAddress,
+       address = ValidatorAddress,
        owner = OwnerAddress,
        stake = Stake,
        fee = Fee,
@@ -71,7 +71,7 @@ owner(Txn) ->
 
 -spec validator(txn_stake_validator()) -> libp2p_crypto:pubkey_bin().
 validator(Txn) ->
-    Txn#blockchain_txn_stake_validator_v1_pb.validator.
+    Txn#blockchain_txn_stake_validator_v1_pb.address.
 
 -spec stake(txn_stake_validator()) -> pos_integer().
 stake(Txn) ->
@@ -123,7 +123,7 @@ validator_sign(Txn, SigFun) ->
     Txn#blockchain_txn_stake_validator_v1_pb{validator_signature=SigFun(EncodedTxn)}.
 
 -spec is_valid_validator(txn_stake_validator()) -> boolean().
-is_valid_validator(#blockchain_txn_stake_validator_v1_pb{validator=PubKeyBin,
+is_valid_validator(#blockchain_txn_stake_validator_v1_pb{address=PubKeyBin,
                                                          validator_signature=Signature}=Txn) ->
     BaseTxn = Txn#blockchain_txn_stake_validator_v1_pb{owner_signature= <<>>,
                                                        validator_signature= <<>>},
@@ -188,9 +188,9 @@ is_valid(Txn, Chain) ->
                                     true -> ok;
                                     false -> throw({not_enough_cooldown, cool,
                                                     CooldownStake, min, MinStake})
-                                end,                                
+                                end,
                                 ok;
-                            N -> 
+                            N ->
                                 throw({bad_nonce, exp, (ValNonce + 1), got, N})
                         end;
                     {error, not_found} ->
@@ -244,7 +244,7 @@ absorb(Txn, Chain) ->
                         0 ->
                             blockchain_ledger_v1:add_validator(Validator, Owner, Stake, Ledger);
                         _ ->
-                            blockchain_ledger_v1:activate_validator(Validator, Ledger)                            
+                            blockchain_ledger_v1:activate_validator(Validator, Ledger)
                     end
             end
     end.
@@ -253,7 +253,7 @@ absorb(Txn, Chain) ->
 print(undefined) -> <<"type=stake_validator, undefined">>;
 print(#blockchain_txn_stake_validator_v1_pb{
          owner = O,
-         validator = Val,
+         address = Val,
          stake = S,
          nonce = N}) ->
     io_lib:format("type=stake_validator, owner=~p, validator=~p, stake=~p, nonce=~p",
@@ -265,7 +265,7 @@ to_json(Txn, _Opts) ->
     #{
       type => <<"stake_validator_v1">>,
       hash => ?BIN_TO_B64(hash(Txn)),
-      validator => ?BIN_TO_B58(validator(Txn)),
+      address => ?BIN_TO_B58(validator(Txn)),
       owner => ?BIN_TO_B58(owner(Txn)),
       validator_signature => ?BIN_TO_B64(validator_signature(Txn)),
       owner_signature => ?BIN_TO_B64(owner_signature(Txn)),

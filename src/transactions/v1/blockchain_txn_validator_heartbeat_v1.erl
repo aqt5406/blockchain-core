@@ -17,7 +17,7 @@
 -export([
          new/3,
          hash/1,
-         addr/1,
+         address/1,
          height/1,
          signature/1,
          version/1,
@@ -40,7 +40,7 @@
           txn_validator_heartbeat().
 new(Address, Height, Version) ->
     #blockchain_txn_validator_heartbeat_v1_pb{
-       addr = Address,
+       address = Address,
        height = Height,
        version = Version
     }.
@@ -51,9 +51,9 @@ hash(Txn) ->
     EncodedTxn = blockchain_txn_validator_heartbeat_v1_pb:encode_msg(BaseTxn),
     crypto:hash(sha256, EncodedTxn).
 
--spec addr(txn_validator_heartbeat()) -> libp2p_crypto:pubkey_bin().
-addr(Txn) ->
-    Txn#blockchain_txn_validator_heartbeat_v1_pb.addr.
+-spec address(txn_validator_heartbeat()) -> libp2p_crypto:pubkey_bin().
+address(Txn) ->
+    Txn#blockchain_txn_validator_heartbeat_v1_pb.address.
 
 -spec height(txn_validator_heartbeat()) -> pos_integer().
 height(Txn) ->
@@ -78,8 +78,8 @@ sign(Txn, SigFun) ->
     Txn#blockchain_txn_validator_heartbeat_v1_pb{signature=SigFun(EncodedTxn)}.
 
 -spec is_valid_sig(txn_validator_heartbeat()) -> boolean().
-is_valid_sig(#blockchain_txn_validator_heartbeat_v1_pb{addr=PubKeyBin,
-                                                         signature=Signature}=Txn) ->
+is_valid_sig(#blockchain_txn_validator_heartbeat_v1_pb{address=PubKeyBin,
+                                                       signature=Signature}=Txn) ->
     BaseTxn = Txn#blockchain_txn_validator_heartbeat_v1_pb{signature= <<>>},
     EncodedTxn = blockchain_txn_validator_heartbeat_v1_pb:encode_msg(BaseTxn),
     PubKey = libp2p_crypto:bin_to_pubkey(PubKeyBin),
@@ -89,7 +89,7 @@ is_valid_sig(#blockchain_txn_validator_heartbeat_v1_pb{addr=PubKeyBin,
           ok | {error, atom()} | {error, {atom(), any()}}.
 is_valid(Txn, Chain) ->
     Ledger = blockchain:ledger(Chain),
-    Validator = addr(Txn),
+    Validator = address(Txn),
     Version = version(Txn),
     TxnHeight = height(Txn),
     {ok, Height} = blockchain_ledger_v1:current_height(Ledger),
@@ -129,7 +129,7 @@ valid_version(_) ->
 -spec absorb(txn_validator_heartbeat(), blockchain:blockchain()) -> ok | {error, atom()} | {error, {atom(), any()}}.
 absorb(Txn, Chain) ->
     Ledger = blockchain:ledger(Chain),
-    Validator = addr(Txn),
+    Validator = address(Txn),
     Version = version(Txn),
     TxnHeight = height(Txn),
 
@@ -144,7 +144,7 @@ absorb(Txn, Chain) ->
 -spec print(txn_validator_heartbeat()) -> iodata().
 print(undefined) -> <<"type=validator_heartbeat, undefined">>;
 print(#blockchain_txn_validator_heartbeat_v1_pb{
-         addr = Val,
+         address = Val,
          height = H,
          version = V}) ->
     io_lib:format("type=validator_heartbeat, validator=~p, height=~p, version=~p",
@@ -156,7 +156,7 @@ to_json(Txn, _Opts) ->
     #{
       type => <<"validator_heartbeat_v1">>,
       hash => ?BIN_TO_B64(hash(Txn)),
-      addr => ?BIN_TO_B58(addr(Txn)),
+      address => ?BIN_TO_B58(address(Txn)),
       height => height(Txn),
       signature => ?BIN_TO_B64(signature(Txn)),
       version => version(Txn)

@@ -778,7 +778,8 @@ process_delayed_actions(Block, Ledger, Chain) ->
         end,
     lists:foreach(
       fun({Owner, Validator, Stake}) ->
-              credit_account(Owner, Stake, Ledger),
+              ok = finalize_validator(Validator, Ledger),
+              ok = credit_account(Owner, Stake, Ledger),
               %% cleanup owner entry
               {ok, OwnerEntry0} = cache_get(Ledger, DefaultCF, owner_name(Owner), []),
               OwnerEntry = binary_to_term(OwnerEntry0),
@@ -3504,16 +3505,30 @@ deactivate_validator(Address, Ledger) ->
             Owner = blockchain_ledger_validator_v1:owner_address(Val),
 
             %% set status to unstaked
-            Val1 = blockchain_ledger_validator_v1:status(unstaked, Val),
+            Val1 = blockchain_ledger_validator_v1:status(cooldown, Val),
             %% increment the nonce
             Val2 = blockchain_ledger_validator_v1:nonce(Nonce + 1, Val1),
-            %% 0 the stake
-            Val3 = blockchain_ledger_validator_v1:stake(0, Val2),
             %% put the stake HNT into cooldown
             ok = cooldown_stake(Owner, Address, Stake, Ledger),
+            update_validator(Address, Val2, Ledger);
+        Error -> Error
+    end.
+
+finalize_validator(Address, Ledger) ->
+    case get_validator(Address, Ledger) of
+        {ok, Val} ->
+            Nonce = blockchain_ledger_validator_v1:nonce(Val),
+
+            %% set status to unstaked
+            Val1 = blockchain_ledgeer_validator_v1:status(unstaked, Val),
+            %% increment the nonce
+            Val2 = blockchain_ledger_validator_v1:nonce(Nonce + 1, Val1),
+            %% zero out the stake
+            Val3 = blockchain_ledger_validator_v1:stake(0, Val2),
             update_validator(Address, Val3, Ledger);
         Error -> Error
     end.
+
 
 -spec activate_validator(libp2p_crypto:pubkey_bin(), ledger()) ->
           ok | {error, any()}.
@@ -3521,17 +3536,13 @@ activate_validator(Address, Ledger) ->
     case get_validator(Address, Ledger) of
         {ok, Val} ->
             Nonce = blockchain_ledger_validator_v1:nonce(Val),
-            {ok, CooldownStake} = get_cooldown_stake(Val, Ledger),
-
             %% set status to staked
             Val1 = blockchain_ledger_validator_v1:status(staked, Val),
             %% increment the nonce
             Val2 = blockchain_ledger_validator_v1:nonce(Nonce + 1, Val1),
-            %% reset the stake
-            Val3 = blockchain_ledger_validator_v1:stake(CooldownStake, Val2),
             %% pull the stake HNT out of cooldown
-            ok = cancel_cooldown_stake(Val3, Ledger),
-            update_validator(Address, Val3, Ledger);
+            ok = cancel_cooldown_stake(Val2, Ledger),
+            update_validator(Address, Val2, Ledger);
         Error -> Error
     end.
 

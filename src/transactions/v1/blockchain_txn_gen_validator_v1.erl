@@ -41,7 +41,7 @@
           Owner :: libp2p_crypto:pubkey_bin(),
           Stake :: pos_integer()) -> txn_genesis_validator().
 new(Address, Owner, Stake) ->
-    #blockchain_txn_gen_validator_v1_pb{addr = Address,
+    #blockchain_txn_gen_validator_v1_pb{address = Address,
                                         owner = Owner,
                                         stake = Stake}.
 
@@ -69,7 +69,7 @@ sign(Txn, _SigFun) ->
 %%--------------------------------------------------------------------
 -spec address(txn_genesis_validator()) -> libp2p_crypto:pubkey_bin().
 address(Txn) ->
-    Txn#blockchain_txn_gen_validator_v1_pb.addr.
+    Txn#blockchain_txn_gen_validator_v1_pb.address.
 
 -spec owner(txn_genesis_validator()) -> libp2p_crypto:pubkey_bin().
 owner(Txn) ->
@@ -120,7 +120,7 @@ absorb(Txn, Chain) ->
 -spec print(txn_genesis_validator()) -> iodata().
 print(undefined) -> <<"type=genesis_validator, undefined">>;
 print(#blockchain_txn_gen_validator_v1_pb{
-         addr = Address, owner = Owner,
+         address = Address, owner = Owner,
          stake = Stake}) ->
     io_lib:format("type=genesis_validator Address=~p, owner=~p, stake=~p",
                   [?TO_ANIMAL_NAME(Address), ?TO_B58(Owner), Stake]).
@@ -131,7 +131,7 @@ to_json(Txn, _Opts) ->
     #{
       type => <<"gen_validator_v1">>,
       hash => ?BIN_TO_B64(hash(Txn)),
-      addr => ?BIN_TO_B58(address(Txn)),
+      address => ?BIN_TO_B58(address(Txn)),
       owner => ?BIN_TO_B58(owner(Txn)),
       stake => stake(Txn)
      }.
@@ -143,7 +143,7 @@ to_json(Txn, _Opts) ->
 -ifdef(TEST).
 
 new_test() ->
-    Tx = #blockchain_txn_gen_validator_v1_pb{addr = <<"0">>,
+    Tx = #blockchain_txn_gen_validator_v1_pb{address = <<"0">>,
                                              owner = <<"1">>,
                                              stake = 10000},
     ?assertEqual(Tx, new(<<"0">>, <<"1">>, 10000)).

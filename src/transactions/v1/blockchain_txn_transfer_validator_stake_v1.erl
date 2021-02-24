@@ -15,7 +15,7 @@
 -include_lib("helium_proto/include/blockchain_txn_transfer_validator_stake_v1_pb.hrl").
 
 -export([
-         new/5, new/6,
+         new/5, new/7,
          hash/1,
          old_validator/1,
          new_validator/1,
@@ -24,6 +24,7 @@
          new_validator_signature/1,
          old_owner_signature/1,
          new_owner_signature/1,
+         amount/1,
          fee/1, calculate_fee/2, calculate_fee/5,
          sign/2,
          new_validator_sign/2,
@@ -49,21 +50,22 @@ new(OldValidatorAddress, NewValidatorAddress,
     OwnerAddress,
     Nonce, Fee) ->
     new(OldValidatorAddress, NewValidatorAddress,
-        OwnerAddress, <<>>,
+        OwnerAddress, <<>>, 0,
         Nonce, Fee).
 
 -spec new(libp2p_crypto:pubkey_bin(), libp2p_crypto:pubkey_bin(),
           libp2p_crypto:pubkey_bin(), libp2p_crypto:pubkey_bin(),
-          pos_integer(), pos_integer()) ->
+          non_neg_integer(), pos_integer(), pos_integer()) ->
           txn_transfer_validator_stake().
 new(OldValidatorAddress, NewValidatorAddress,
-    OldOwnerAddress, NewOwnerAddress,
+    OldOwnerAddress, NewOwnerAddress, Amount,
     Nonce, Fee) ->
     #blockchain_txn_transfer_validator_stake_v1_pb{
-       old_addr = OldValidatorAddress,
-       new_addr = NewValidatorAddress,
+       old_address = OldValidatorAddress,
+       new_address = NewValidatorAddress,
        new_owner = NewOwnerAddress,
        old_owner = OldOwnerAddress,
+       amount = Amount,
        fee = Fee,
        nonce = Nonce
     }.
@@ -84,15 +86,19 @@ new_owner(Txn) ->
 
 -spec new_validator(txn_transfer_validator_stake()) -> libp2p_crypto:pubkey_bin().
 new_validator(Txn) ->
-    Txn#blockchain_txn_transfer_validator_stake_v1_pb.new_addr.
+    Txn#blockchain_txn_transfer_validator_stake_v1_pb.new_address.
 
 -spec old_validator(txn_transfer_validator_stake()) -> libp2p_crypto:pubkey_bin().
 old_validator(Txn) ->
-    Txn#blockchain_txn_transfer_validator_stake_v1_pb.old_addr.
+    Txn#blockchain_txn_transfer_validator_stake_v1_pb.old_address.
 
 -spec nonce(txn_transfer_validator_stake()) -> pos_integer().
 nonce(Txn) ->
     Txn#blockchain_txn_transfer_validator_stake_v1_pb.nonce.
+
+-spec amount(txn_transfer_validator_stake()) -> non_neg_integer().
+amount(Txn) ->
+    Txn#blockchain_txn_transfer_validator_stake_v1_pb.amount.
 
 -spec fee(txn_transfer_validator_stake()) -> non_neg_integer().
 fee(Txn) ->
@@ -151,7 +157,7 @@ base(Txn) ->
 
 -spec is_valid_new_validator(txn_transfer_validator_stake()) -> boolean().
 is_valid_new_validator(#blockchain_txn_transfer_validator_stake_v1_pb{
-                          new_addr=PubKeyBin,
+                          new_address=PubKeyBin,
                           new_validator_signature=Signature}=Txn) ->
     BaseTxn = base(Txn),
     EncodedTxn = blockchain_txn_transfer_validator_stake_v1_pb:encode_msg(BaseTxn),
@@ -203,6 +209,16 @@ is_valid(Txn, Chain) ->
                         %% no new owner just means this is an in-account transfer
                         ok
                 end,
+                %% make sure them amount is encoded correctly and is only specified in the correct
+                %% case
+                case amount(Txn) of
+                    N when is_integer(N) andalso N >= 0 ->
+                        case new_owner(Txn) /= <<>> of
+                            true -> ok;
+                            false -> throw(amount_set_for_inter_account_transfer)
+                        end;
+                    N -> throw({bad_amount, N})
+                end,
                 %% check fee
                 AreFeesEnabled = blockchain_ledger_v1:txn_fees_active(Ledger),
                 ExpectedTxnFee = calculate_fee(Txn, Chain),
@@ -218,7 +234,7 @@ is_valid(Txn, Chain) ->
                 end,
                 %% make sure that existing validator exists and is staked
                 case blockchain_ledger_v1:get_validator(OldValidator, Ledger) of
-                    {ok, OV} ->                         
+                    {ok, OV} ->
                         %% make sure that the nonce is correct
                         VNonce = blockchain_ledger_validator_v1:nonce(OV),
                         case Nonce == (VNonce + 1) of
@@ -252,26 +268,42 @@ absorb(Txn, Chain) ->
     NewValidator = new_validator(Txn),
     OldValidator = old_validator(Txn),
     Nonce = nonce(Txn),
+    Amount = amount(Txn),
     Fee = fee(Txn),
-    
+
     case blockchain_ledger_v1:debit_fee(OldOwner, Fee, Ledger, true) of
         {error, _Reason} = Err -> Err;
         ok ->
             case blockchain_ledger_v1:get_validator(OldValidator, Ledger) of
-                {ok, OV} ->                         
+                {ok, OV} ->
                     %% for old set stake to 0 and mark as unstaked
                     OV1 = blockchain_ledger_validator_v1:status(unstaked, OV),
                     OV2 = blockchain_ledger_validator_v1:stake(0, OV1),
-                    %% increment nonce 
+                    %% increment nonce
                     OV3 = blockchain_ledger_validator_v1:nonce(Nonce, OV2),
                     ok = blockchain_ledger_v1:update_validator(OldValidator, OV3, Ledger),
-                    %% change address on old record 
+                    %% change address on old record
                     NV =  blockchain_ledger_validator_v1:address(NewValidator, OV),
                     NV1 = blockchain_ledger_validator_v1:nonce(Nonce, NV),
                     NV2 =
                         case NewOwner == <<>> of
                             true -> NV1;
                             false -> blockchain_ledger_validator_v1:owner_address(NewOwner, NV1)
+                        end,
+                    %% do the swap if an amount is specified
+                    ok =
+                        case Amount > 0 of
+                            true ->
+                                {ok, NewOwnerEntry} = blockchain_ledger_v1:find_entry(NewOwner, Ledger),
+                                NewOwnerNonce = blockchain_ledger_entry_v1:nonce(NewOwnerEntry),
+                                case blockchain_ledger_v1:debit_account(NewOwner, Amount, NewOwnerNonce + 1, Ledger) of
+                                    {error, _Reason} = Err ->
+                                        Err;
+                                    ok ->
+                                    blockchain_ledger_v1:credit_account(OldOwner, Amount, Ledger)
+                                end;
+                            false ->
+                                ok
                         end,
                     ok = blockchain_ledger_v1:update_validator(NewValidator, NV2, Ledger);
                 Err -> Err
@@ -283,12 +315,14 @@ print(undefined) -> <<"type=transfer_validator_stake, undefined">>;
 print(#blockchain_txn_transfer_validator_stake_v1_pb{
          new_owner = NO,
          old_owner = OO,
-         new_addr = NewVal,
-         old_addr = OldVal,
+         new_address = NewVal,
+         old_address = OldVal,
+         amount = Amount,
          nonce = N}) ->
     io_lib:format("type=transfer_validator_stake, old_owner=~p, new_owner(optional)=~p "
-                  "new_validator=~p, old_validator=~p, nonce=~p",
-                  [?TO_B58(OO), ?TO_B58(NO), ?TO_ANIMAL_NAME(NewVal), ?TO_ANIMAL_NAME(OldVal), N]).
+                  "new_validator=~p, old_validator=~p, amount=~p, nonce=~p",
+                  [?TO_B58(OO), ?TO_B58(NO), ?TO_ANIMAL_NAME(NewVal), ?TO_ANIMAL_NAME(OldVal),
+                   Amount, N]).
 
 
 -spec to_json(txn_transfer_validator_stake(), blockchain_json:opts()) -> blockchain_json:json_object().
@@ -296,13 +330,14 @@ to_json(Txn, _Opts) ->
     #{
       type => <<"transfer_validator_stake_v1">>,
       hash => ?BIN_TO_B64(hash(Txn)),
-      new_addr => ?BIN_TO_B58(new_validator(Txn)),
-      old_addr => ?BIN_TO_B58(old_validator(Txn)),
+      new_address => ?BIN_TO_B58(new_validator(Txn)),
+      old_address => ?BIN_TO_B58(old_validator(Txn)),
       new_owner => ?BIN_TO_B58(new_owner(Txn)),
       old_owner => ?BIN_TO_B58(old_owner(Txn)),
       new_validator_signature => ?BIN_TO_B64(new_validator_signature(Txn)),
       old_owner_signature => ?BIN_TO_B64(old_owner_signature(Txn)),
       new_owner_signature => ?BIN_TO_B64(new_owner_signature(Txn)),
+      amount => amount(Txn),
       fee => fee(Txn),
       nonce => nonce(Txn)
      }.

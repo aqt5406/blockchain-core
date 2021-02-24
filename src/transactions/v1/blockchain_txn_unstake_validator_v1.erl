@@ -17,7 +17,7 @@
 -export([
          new/3,
          hash/1,
-         addr/1,
+         address/1,
          owner/1,
          owner_signature/1,
          nonce/1,
@@ -40,7 +40,7 @@
           txn_unstake_validator().
 new(ValidatorAddress, OwnerAddress, Nonce) ->
     #blockchain_txn_unstake_validator_v1_pb{
-       addr = ValidatorAddress,
+       address = ValidatorAddress,
        owner = OwnerAddress,
        nonce = Nonce
     }.
@@ -55,9 +55,9 @@ hash(Txn) ->
 owner(Txn) ->
     Txn#blockchain_txn_unstake_validator_v1_pb.owner.
 
--spec addr(txn_unstake_validator()) -> libp2p_crypto:pubkey_bin().
-addr(Txn) ->
-    Txn#blockchain_txn_unstake_validator_v1_pb.addr.
+-spec address(txn_unstake_validator()) -> libp2p_crypto:pubkey_bin().
+address(Txn) ->
+    Txn#blockchain_txn_unstake_validator_v1_pb.address.
 
 -spec fee(txn_unstake_validator()) -> non_neg_integer().
 fee(Txn) ->
@@ -102,7 +102,7 @@ is_valid_owner(#blockchain_txn_unstake_validator_v1_pb{owner=PubKeyBin,
           ok | {error, atom()} | {error, {atom(), any()}}.
 is_valid(Txn, Chain) ->
     Ledger = blockchain:ledger(Chain),
-    Validator = addr(Txn),
+    Validator = address(Txn),
     Nonce = nonce(Txn),
     Fee = fee(Txn),
     case is_valid_owner(Txn) of
@@ -143,7 +143,7 @@ is_valid(Txn, Chain) ->
 absorb(Txn, Chain) ->
     Ledger = blockchain:ledger(Chain),
     Owner = owner(Txn),
-    Validator = addr(Txn),
+    Validator = address(Txn),
     Fee = fee(Txn),
 
     case blockchain_ledger_v1:debit_fee(Owner, Fee, Ledger, true) of
@@ -156,7 +156,7 @@ absorb(Txn, Chain) ->
 print(undefined) -> <<"type=unstake_validator, undefined">>;
 print(#blockchain_txn_unstake_validator_v1_pb{
          owner = O,
-         addr = Val,
+         address = Val,
          nonce = N}) ->
     io_lib:format("type=unstake_validator, owner=~p, validator=~p, nonce=~p",
                   [?TO_B58(O), ?TO_ANIMAL_NAME(Val), N]).
@@ -167,7 +167,7 @@ to_json(Txn, _Opts) ->
     #{
       type => <<"unstake_validator_v1">>,
       hash => ?BIN_TO_B64(hash(Txn)),
-      addr => ?BIN_TO_B58(addr(Txn)),
+      address => ?BIN_TO_B58(address(Txn)),
       owner => ?BIN_TO_B58(owner(Txn)),
       owner_signature => ?BIN_TO_B64(owner_signature(Txn)),
       fee => fee(Txn),

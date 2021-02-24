@@ -41,7 +41,7 @@
   0},
  {<<"helium_proto">>,
   {git,"https://github.com/helium/proto.git",
-       {ref,"f87ca4b1146eccac7ec46f790de3964765928d06"}},
+       {ref,"d0089d799cf421d4ef4bc2eeade9cc0a1a67d26a"}},
   0},
  {<<"inert">>,{pkg,<<"inert">>,<<"1.0.1">>},2},
  {<<"inet_cidr">>,{pkg,<<"erl_cidr">>,<<"1.0.2">>},2},
